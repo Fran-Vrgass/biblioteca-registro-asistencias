@@ -1,0 +1,64 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Registro de asistencia - Biblioteca</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <main class="contenedor">
+
+        <h1>Biblioteca Pública de Alajuela</h1>
+
+        <h2>Registro de asistencia</h2>
+
+        <p>Ingrese sus datos para registrar su participación.</p>
+
+       <form id="formularioAsistencia">
+        <div class="cf-turnstile" data-sitekey="0x4AAAAAAFxGX_WMMgNXGu66"></div>
+        <input type="hidden" id="fechaHora">
+
+            <label for="carnet">Número de carné</label>
+            <input
+                type="text"
+                id="carnet"
+                placeholder="Ejemplo: BIB-000125"
+                required
+            >
+
+            <label for="actividad">Seleccione la actividad</label>
+
+           <select id="actividad" required>
+    <option value="">Cargando actividades...</option>
+</select>
+
+            <label>Firma del participante</label>
+
+            <div class="firma">
+    <canvas id="lienzoFirma"></canvas>
+</div>
+
+<button type="button" id="limpiarFirma">
+    Borrar firma
+</button>
+
+<button type="submit">
+    Registrar asistencia
+</button>
+
+<p id="mensaje"></p>
+
+</form>
+
+    </main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="script.js"></script>
+</body>
+</html>
