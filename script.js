@@ -1,30 +1,29 @@
 
-const SUPABASE_URL = "https://yhzoryuhrrkggtlyppjt.supabase.co";
-const SUPABASE_KEY = "sb_publishable_Kaw2rZJutbc5BmrIrEmN6Q_A7kSUebl";
+"use strict";
 
-const supabaseClient = window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_KEY
-);
-
-const canvas = document.getElementById("lienzoFirma");
-const ctx = canvas.getContext("2d");
+// =====================================
+// ELEMENTOS DEL FORMULARIO
+// =====================================
 
 const formulario = document.getElementById("formularioAsistencia");
 const selector = document.getElementById("actividad");
 const mensaje = document.getElementById("mensaje");
+const canvas = document.getElementById("lienzoFirma");
 const botonLimpiar = document.getElementById("limpiarFirma");
 const botonEnviar = formulario.querySelector('button[type="submit"]');
 
-let dibujando = false;
-let firmaRealizada = false;
-let pointerActivo = null;
-let observadorLienzo;
+const ctx = canvas.getContext("2d");
 
-// CONFIGURACIÓN DEL LIENZO
+let firmaRealizada = false;
+let dibujando = false;
+let pointerActivo = null;
+
+// =====================================
+// FIRMA DIGITAL
+// =====================================
 
 function configurarPincel() {
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 3;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = "#245b45";
@@ -36,22 +35,26 @@ function ajustarLienzo() {
 
     if (!rect.width || !rect.height) return;
 
-    const dpr = window.devicePixelRatio || 1;
+    const escala = window.devicePixelRatio || 1;
+    const ancho = Math.round(rect.width * escala);
+    const alto = Math.round(rect.height * escala);
 
-    // Conservar el contenido anterior al cambiar dimensiones.
+    if (canvas.width === ancho && canvas.height === alto) {
+        return;
+    }
+
     const copia = document.createElement("canvas");
     copia.width = canvas.width;
     copia.height = canvas.height;
 
-    if (copia.width && copia.height) {
+    if (canvas.width && canvas.height) {
         copia.getContext("2d").drawImage(canvas, 0, 0);
     }
 
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
+    canvas.width = ancho;
+    canvas.height = alto;
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
+    ctx.setTransform(escala, 0, 0, escala, 0, 0);
     configurarPincel();
 
     if (copia.width && copia.height) {
@@ -63,22 +66,13 @@ function ajustarLienzo() {
     }
 }
 
+canvas.style.touchAction = "none";
+
 ajustarLienzo();
 
-// Detectar cambios de tamaño.
-if ("ResizeObserver" in window) {
-    observadorLienzo = new ResizeObserver(() => {
-        ajustarLienzo();
-    });
+window.addEventListener("resize", ajustarLienzo);
 
-    observadorLienzo.observe(canvas.parentElement);
-} else {
-    window.addEventListener("resize", ajustarLienzo);
-}
-
-// FIRMA
-
-function obtenerPosicion(evento) {
+function posicion(evento) {
     const rect = canvas.getBoundingClientRect();
 
     return {
@@ -88,21 +82,25 @@ function obtenerPosicion(evento) {
 }
 
 canvas.addEventListener("pointerdown", (evento) => {
-    if (!evento.isPrimary || pointerActivo !== null) return;
+    if (pointerActivo !== null || !evento.isPrimary) return;
+
+    if (evento.pointerType === "mouse" && evento.button !== 0) {
+        return;
+    }
 
     evento.preventDefault();
 
     pointerActivo = evento.pointerId;
     dibujando = true;
 
-    const posicion = obtenerPosicion(evento);
+    const punto = posicion(evento);
 
     ctx.beginPath();
-    ctx.arc(posicion.x, posicion.y, 1.25, 0, Math.PI * 2);
+    ctx.arc(punto.x, punto.y, 1.5, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.beginPath();
-    ctx.moveTo(posicion.x, posicion.y);
+    ctx.moveTo(punto.x, punto.y);
 
     firmaRealizada = true;
 
@@ -114,51 +112,77 @@ canvas.addEventListener("pointermove", (evento) => {
 
     evento.preventDefault();
 
-    const posicion = obtenerPosicion(evento);
+    const punto = posicion(evento);
 
-    ctx.lineTo(posicion.x, posicion.y);
+    ctx.lineTo(punto.x, punto.y);
     ctx.stroke();
 });
 
-function terminarDibujo(evento) {
-    if (evento && evento.pointerId !== pointerActivo) return;
+function terminarFirma(evento) {
+    if (evento.pointerId !== pointerActivo) return;
 
     dibujando = false;
     pointerActivo = null;
     ctx.beginPath();
 }
 
-canvas.addEventListener("pointerup", terminarDibujo);
-canvas.addEventListener("pointercancel", terminarDibujo);
-canvas.addEventListener("lostpointercapture", terminarDibujo);
+canvas.addEventListener("pointerup", terminarFirma);
+canvas.addEventListener("pointercancel", terminarFirma);
+canvas.addEventListener("lostpointercapture", terminarFirma);
 
-// BORRAR FIRMA
+function limpiarFirma() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-botonLimpiar.addEventListener("click", () => {
-    ctx.clearRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
-
+    firmaRealizada = false;
     dibujando = false;
     pointerActivo = null;
-    firmaRealizada = false;
-    ctx.beginPath();
 
+    ctx.beginPath();
+}
+
+botonLimpiar.addEventListener("click", () => {
+    limpiarFirma();
     mensaje.textContent = "";
 });
 
-// CARGAR ACTIVIDADES
+// =====================================
+// SUPABASE
+// =====================================
+
+const SUPABASE_URL =
+    "https://yhzoryuhrrkggtlyppjt.supabase.co";
+
+const SUPABASE_KEY =
+    "sb_publishable_Kaw2rZJutbc5BmrIrEmN6Q_A7kSUebl";
+
+let supabaseClient = null;
+
+function iniciarSupabase() {
+    if (!window.supabase) {
+        throw new Error(
+            "No se pudo cargar la biblioteca de Supabase."
+        );
+    }
+
+    supabaseClient = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+    );
+}
+
+// =====================================
+// ACTIVIDADES
+// =====================================
 
 async function cargarActividades() {
+    selector.disabled = true;
+
     selector.innerHTML =
         '<option value="">Cargando actividades...</option>';
 
-    selector.disabled = true;
-
     try {
+        iniciarSupabase();
+
         const { data, error } = await supabaseClient
             .from("actividades")
             .select("nombre")
@@ -174,6 +198,9 @@ async function cargarActividades() {
             selector.innerHTML =
                 '<option value="">No hay actividades disponibles</option>';
 
+            mensaje.textContent =
+                "No hay actividades activas registradas.";
+
             return;
         }
 
@@ -186,6 +213,13 @@ async function cargarActividades() {
             selector.appendChild(opcion);
         });
 
+        selector.disabled = false;
+
+        console.log(
+            "Actividades cargadas correctamente:",
+            data.length
+        );
+
     } catch (error) {
         console.error("Error al cargar actividades:", error);
 
@@ -193,19 +227,17 @@ async function cargarActividades() {
             '<option value="">Error al cargar actividades</option>';
 
         mensaje.textContent =
-            "No se pudieron cargar las actividades. " +
-            "Detalle: " + error.message;
+            "Error al cargar actividades: " + error.message;
 
         mensaje.style.color = "red";
-
-    } finally {
-        selector.disabled = false;
     }
 }
 
 cargarActividades();
 
-// ENVIAR ASISTENCIA
+// =====================================
+// REGISTRAR ASISTENCIA
+// =====================================
 
 formulario.addEventListener("submit", async (evento) => {
     evento.preventDefault();
@@ -213,20 +245,9 @@ formulario.addEventListener("submit", async (evento) => {
     const carnet = document.getElementById("carnet").value.trim();
     const actividad = selector.value;
 
-    if (!carnet) {
-        mensaje.textContent = "Debe ingresar su número de carné.";
-        mensaje.style.color = "red";
-        return;
-    }
-
-    if (!actividad) {
-        mensaje.textContent = "Debe seleccionar una actividad.";
-        mensaje.style.color = "red";
-        return;
-    }
-
-    if (!firmaRealizada) {
-        mensaje.textContent = "Debe realizar su firma antes de continuar.";
+    if (!carnet || !actividad || !firmaRealizada) {
+        mensaje.textContent =
+            "Completá el carné, la actividad y la firma.";
         mensaje.style.color = "red";
         return;
     }
@@ -237,8 +258,14 @@ formulario.addEventListener("submit", async (evento) => {
 
     if (!tokenTurnstile) {
         mensaje.textContent =
-            "Por favor, completá la verificación de seguridad.";
+            "Completá la verificación de seguridad.";
+        mensaje.style.color = "red";
+        return;
+    }
 
+    if (!supabaseClient) {
+        mensaje.textContent =
+            "No hay conexión con Supabase.";
         mensaje.style.color = "red";
         return;
     }
@@ -247,62 +274,54 @@ formulario.addEventListener("submit", async (evento) => {
 
     botonEnviar.disabled = true;
     mensaje.textContent = "Registrando asistencia...";
-    mensaje.style.color = "black";
+    mensaje.style.color = "#333333";
 
     try {
-        const { data, error } = await supabaseClient.functions.invoke(
-            "registrar-asistencia",
-            {
-                body: {
-                    carnet: carnet,
-                    actividad: actividad,
-                    firma: firma,
-                    tokenTurnstile: tokenTurnstile
+        const { data, error } =
+            await supabaseClient.functions.invoke(
+                "registrar-asistencia",
+                {
+                    body: {
+                        carnet,
+                        actividad,
+                        firma,
+                        tokenTurnstile
+                    }
                 }
-            }
-        );
+            );
 
         if (error) {
-            let respuesta = null;
+            let detalle = null;
 
             try {
-                respuesta = await error.context?.json?.();
-            } catch (_) {
-                // Si no hay respuesta JSON, usamos el error original.
-            }
+                detalle = await error.context?.json?.();
+            } catch (_) {}
 
-            if (respuesta?.error) {
-                throw new Error(respuesta.error);
-            }
-
-            throw error;
+            throw new Error(
+                detalle?.error ||
+                error.message ||
+                "No se pudo registrar la asistencia."
+            );
         }
 
         mensaje.textContent =
-            data?.mensaje || "Asistencia registrada correctamente.";
+            data?.mensaje ||
+            "Asistencia registrada correctamente.";
 
         mensaje.style.color = "green";
 
-        // Limpiar firma después del registro exitoso.
-        ctx.clearRect(
-            0,
-            0,
-            canvas.width,
-            canvas.height
-        );
-
-        firmaRealizada = false;
-        dibujando = false;
-        pointerActivo = null;
-
         formulario.reset();
+        limpiarFirma();
+
+        if (window.turnstile) {
+            window.turnstile.reset();
+        }
 
     } catch (error) {
         console.error("Error al registrar:", error);
 
         mensaje.textContent =
-            error.message ||
-            "No se pudo registrar la asistencia.";
+            error.message || "No se pudo registrar.";
 
         mensaje.style.color = "red";
 
